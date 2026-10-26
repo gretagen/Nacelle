@@ -104,7 +104,7 @@ function gen.plan(cfg, sync)
     table.insert(changes, sync.change("-", "packages-isolated", pkg, nil,
       function(_, s)
         if tracked[pkg] then
-          if not s.shell("zeta -Remove --pass --force --isolate " .. shquote(pkg)) then
+          if not s.shell("zeta -Delete --pass --force --isolate " .. shquote(pkg)) then
             io.stderr:write("[warn] '" .. pkg .. "' — could not be removed\n")
             return false
           end
