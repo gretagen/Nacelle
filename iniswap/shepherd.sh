@@ -73,13 +73,29 @@ generate_shepherd_services() {
            #f)))
 
 ;; Load every drop-in, in name order. This is only the launch order:
-;; shepherd still starts services by #:requirement.
+;; shepherd still starts services by #:requirement. Each file is loaded
+;; under its own catch: a malformed drop-in is reported on the console and
+;; skipped — one bad service file must never take PID1 down.
 (let ((dir "/etc/shepherd.d"))
   (when (file-exists? dir)
     (for-each
      (lambda (name)
        (when (string-suffix? ".scm" name)
-         (load (string-append dir "/" name))))
+         (let ((path (string-append dir "/" name)))
+           (catch #t
+             (lambda ()
+               ;; primitive-load, not load: Guile's load warns in the
+               ;; declarative module shepherd evaluates configs in, and
+               ;; prints a WARNING on every boot because of it.
+               (primitive-load path))
+             (lambda (key . args)
+               (display "shepherd: skipping broken drop-in ")
+               (display path)
+               (display ": ")
+               (write key)
+               (display " ")
+               (write args)
+               (newline))))))
      (sort (scandir dir) string<?))))
 
 ;; 'boot' is first in the reversed list; the daemons and gettys follow,
