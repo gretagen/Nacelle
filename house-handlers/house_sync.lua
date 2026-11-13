@@ -15,6 +15,17 @@ local house_sync = {}
 -- the file on disk already matches the declaration.
 house_sync.repower = os.getenv("NACELLE_REPOWER") ~= nil
 
+-- Set by the shell helpers when a command ends because the user pressed
+-- Ctrl+C. os.execute runs through system(), which per POSIX ignores
+-- SIGINT/SIGQUIT in *this* process while waiting for the child: the child
+-- dies (same foreground process group) and this process never sees the
+-- signal. The child's signal-death is therefore the only evidence of an
+-- interrupt, and it is what lets the apply loop tell "user cancelled" from
+-- "command failed". A Ctrl+C landing between commands still reaches us with
+-- the default disposition and kills the process outright — that is correct
+-- and needs no flag.
+house_sync.interrupted = false
+
 -- single gate helper used by every generator equality check
 function house_sync.differs(current, desired)
   if house_sync.repower then return true end
@@ -82,10 +93,28 @@ function house_sync.write_file(path, content)
 end
 
 -- shell helpers
+--
+-- Every command the house runs goes through one of these, so they share
+-- the interrupt check: the child ended by SIGINT/SIGQUIT (signal 2/3) or a
+-- shell propagated that death as exit 130/131. Either way the run is
+-- cancelled, not failed.
+local function child_interrupted(how, code)
+  return (how == "signal" and (code == 2 or code == 3)) or
+    (how == "exit" and (code == 130 or code == 131))
+end
+
 function house_sync.shell(cmd)
   house_sync.vprint("shell: %s", cmd)
-  local ok = os.execute(cmd .. " 2>/dev/null")
-  return ok
+  local ok, how, code = os.execute(cmd .. " 2>/dev/null")
+  if child_interrupted(how, code) then
+    house_sync.vprint("  → interrupted (how=%s code=%s)", tostring(how), tostring(code))
+    house_sync.interrupted = true
+    return false
+  end
+  -- false, never nil: generators return this straight out of their
+  -- apply_fn, and house_sync.apply tells a failure from success by
+  -- `result == false` — nil would be read as success.
+  return ok or false
 end
 
 function house_sync.shell_output(cmd)
@@ -104,12 +133,22 @@ end
 -- run a user command under /bin/bash with output visible
 function house_sync.shell_live(cmd)
   house_sync.vprint("bash: %s", cmd)
-  return os.execute("/bin/bash -c " .. house_sync.shell_quote(cmd))
+  local ok, how, code = os.execute("/bin/bash -c " .. house_sync.shell_quote(cmd))
+  if child_interrupted(how, code) then
+    house_sync.vprint("  → interrupted (how=%s code=%s)", tostring(how), tostring(code))
+    house_sync.interrupted = true
+    return false
+  end
+  return ok or false
 end
 
 -- silent probe under /bin/bash: true only when the command exits 0
 function house_sync.shell_ok(cmd)
-  return os.execute("/bin/bash -c " .. house_sync.shell_quote(cmd .. " 2>/dev/null")) == true
+  local ok, how, code = os.execute("/bin/bash -c " .. house_sync.shell_quote(cmd .. " 2>/dev/null"))
+  if child_interrupted(how, code) then
+    house_sync.interrupted = true
+  end
+  return ok == true
 end
 
 -- true when the current user can write path (or, for a missing path, its
@@ -252,10 +291,14 @@ function house_sync.summary(changes)
 end
 
 -- apply all changes
+--
+-- Returns true, failures, skipped, interrupted. An interrupt (Ctrl+C
+-- during a command) stops the loop right there: the current command is
+-- already dead and the remaining changes must not run.
 function house_sync.apply(changes)
   local failures = 0
   local skipped = 0
-  for _, c in ipairs(changes) do
+  for i, c in ipairs(changes) do
     local sym = c.type == "+" and "[+]" or c.type == "-" and "[-]" or "[~]"
     if c.requires_root then
       io.stderr:write(string.format("[skip] %s %s/%s (requires root)\n", sym, c.section or "?", c.target))
@@ -268,6 +311,10 @@ function house_sync.apply(changes)
           io.stderr:write("[error] " .. tostring(result) .. "\n")
           failures = failures + 1
         elseif result == false then
+          -- an interrupt shows up as a failed command too (the shell
+          -- helpers return false): the loop breaks on the flag, so no
+          -- further change is attempted and this failure is just the
+          -- interrupted one
           io.stderr:write("[error] command failed\n")
           failures = failures + 1
         else
@@ -275,11 +322,17 @@ function house_sync.apply(changes)
         end
       end
     end
+    if house_sync.interrupted then
+      io.stderr:write(string.format(
+        "[interrupt] house synchronization aborted : %d of %d change(s) applied, %d remaining\n",
+        i - 1, #changes, #changes - i + 1))
+      return true, failures, skipped, true
+    end
   end
   if failures > 0 then
     io.stderr:write(string.format("\n[warn] %d change(s) failed : review errors above\n", failures))
   end
-  return true, failures, skipped
+  return true, failures, skipped, false
 end
 
 -- CLI entry point
@@ -326,8 +379,15 @@ if arg and arg[0] and arg[0]:match("house_sync%.lua$") then
   end
 
   print("Applying house changes...")
-  local _, failures, skipped = house_sync.apply(changes)
-  if failures and failures > 0 then
+  local _, failures, skipped, interrupted = house_sync.apply(changes)
+  if interrupted then
+    -- Ctrl+C during a command : counts are on the [interrupt] line above.
+    -- Exit 130 (128 + SIGINT) so the shell sees a conventional interrupt
+    -- status, and create no generation : the run is partial.
+    print("Interrupted : house synchronization aborted.")
+    io.stderr:write("No new generation has been created : re-run nacelle to apply the remaining changes.\n")
+    os.exit(130)
+  elseif failures and failures > 0 then
     print("House synchronization finished with " .. failures .. " failure(s).")
     io.stderr:write("No new generation created : fix errors and re-run, or boot a previous generation.\n")
   elseif house_sync.unprivileged then

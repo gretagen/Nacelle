@@ -21,6 +21,17 @@ local sync = {}
 -- short-circuit to "no change".
 sync.repower = os.getenv("NACELLE_REPOWER") ~= nil
 
+-- Set by sync.shell when a command ends because the user pressed Ctrl+C.
+-- os.execute runs through system(), which per POSIX ignores SIGINT/SIGQUIT
+-- in *this* process while waiting for the child: the child dies (it is in
+-- the same foreground process group) and the nacelle process never sees the
+-- signal. The child's signal-death is therefore the only evidence of an
+-- interrupt, and it is what lets the apply loop tell "user cancelled" from
+-- "command failed". A Ctrl+C landing between commands still reaches us with
+-- the default disposition and kills the process outright — that is correct
+-- and needs no flag.
+sync.interrupted = false
+
 -- single gate helper used by every generator equality check
 function sync.differs(current, desired)
   if sync.repower then return true end
@@ -82,12 +93,19 @@ function sync.write_file(path, content)
 end
 
 -- shell helpers
+--
+-- Every command the sync runs goes through here, so this is where an
+-- interrupted command is recognised: the child ended by SIGINT/SIGQUIT
+-- (signal 2/3) or a shell propagated that death as exit 130/131. Either
+-- way the run is cancelled, not failed.
 function sync.shell(cmd)
   sync.vprint("shell: %s", cmd)
-  local ok = os.execute(cmd)
-  if type(ok) == "number" then
-    sync.vprint("  → exit %d", ok)
-    return ok == 0
+  local ok, how, code = os.execute(cmd)
+  if (how == "signal" and (code == 2 or code == 3)) or
+     (how == "exit" and (code == 130 or code == 131)) then
+    sync.vprint("  → interrupted (how=%s code=%s)", tostring(how), tostring(code))
+    sync.interrupted = true
+    return false
   end
   sync.vprint("  → %s", tostring(ok))
   return ok or false
@@ -211,10 +229,16 @@ function sync.summary(changes)
 end
 
 -- apply all changes
+--
+-- Returns true, failures, interrupted. An interrupt (Ctrl+C during a
+-- command) stops the loop right there: the current command is already
+-- dead, the remaining changes must not run, and the caller must skip the
+-- generation creation — a partial run must not be recorded as a
+-- generation.
 function sync.apply(changes)
   local failures = 0
   local merged_applied = false
-  for _, c in ipairs(changes) do
+  for i, c in ipairs(changes) do
     local sym = c.type == "+" and "[+]" or c.type == "-" and "[-]" or "[~]"
     io.stderr:write(string.format("[apply] %s %s/%s\n", sym, c.section or "?", c.target))
     if c.apply_fn then
@@ -223,6 +247,9 @@ function sync.apply(changes)
         io.stderr:write("[error] " .. tostring(result) .. "\n")
         failures = failures + 1
       elseif result == false then
+        -- an interrupt shows up as a failed command too (sync.shell returns
+        -- false): the loop below breaks on the flag, so no further change
+        -- is attempted and this failure is just the interrupted one
         io.stderr:write("[error] command failed\n")
         failures = failures + 1
       else
@@ -231,6 +258,12 @@ function sync.apply(changes)
           merged_applied = true
         end
       end
+    end
+    if sync.interrupted then
+      io.stderr:write(string.format(
+        "[interrupt] synchronization aborted : %d of %d change(s) applied, %d remaining\n",
+        i - 1, #changes, #changes - i + 1))
+      return true, failures, true
     end
   end
   -- Post-merge hooks (desktop/icon/font caches, ldconfig, wayland pruning)
@@ -243,13 +276,16 @@ function sync.apply(changes)
         if not ok then
           io.stderr:write("[error] post_merge: " .. tostring(err) .. "\n")
         end
+        -- a hook that ends on Ctrl+C stops the remaining hooks: the caches
+        -- are refreshed by the next run
+        if sync.interrupted then return true, failures, true end
       end
     end
   end
   if failures > 0 then
     io.stderr:write(string.format("\n[warn] %d change(s) failed : review errors above\n", failures))
   end
-  return true, failures
+  return true, failures, false
 end
 
 -- CLI entry point
@@ -287,8 +323,15 @@ if arg and arg[0] and arg[0]:match("sync%.lua$") then
   end
 
   print("Applying changes...")
-  local _, failures = sync.apply(changes)
-  if failures and failures > 0 then
+  local _, failures, interrupted = sync.apply(changes)
+  if interrupted then
+    -- Ctrl+C during a command : counts are on the [interrupt] line above.
+    -- Exit 130 (128 + SIGINT) so the shell sees a conventional
+    -- interrupt status, and create no generation : the run is partial.
+    print("Interrupted : synchronization aborted.")
+    io.stderr:write("No new generation has been created : re-run nacelle to apply the remaining changes.\n")
+    os.exit(130)
+  elseif failures and failures > 0 then
     print("Synchronization finished with " .. failures .. " failure(s).")
     io.stderr:write("No new generation has been created : fix errors first.\n")
   else
