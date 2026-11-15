@@ -147,7 +147,7 @@ function registry.register(cat, src)
     fail("refusing to register an invalid %s config (%s):\n%s", cat, src, tostring(err))
   end
 
-  io.write("name of the config to register : ")
+  io.write("name of the config to register: ")
   io.flush()
   local name = normalize_name(io.read())
   if not name then fail("no name given") end

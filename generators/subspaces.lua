@@ -30,7 +30,7 @@ function gen.plan(cfg, sync)
   -- warn about unknown distro names
   for _, distro in ipairs(cfg.subspaces) do
     if not valid_distros[distro] then
-      io.stderr:write("[warn] subspaces: unknown distro '" .. distro .. "'\n")
+      io.stderr:write("warning: subspaces: unknown distro '" .. distro .. "'\n")
       io.stderr:write("  supported: debian, alpine, gentoo, void, fedora, opensuse, arch, nixos\n")
     end
   end
@@ -40,10 +40,10 @@ function gen.plan(cfg, sync)
     if valid_distros[distro] and not installed[distro] then
       table.insert(changes, sync.change("+", "subspaces", distro, nil,
         function(_, s)
-          io.stderr:write("[apply] installing " .. distro .. " subspace...\n")
+          io.stderr:write("installing " .. distro .. " subspace...\n")
           local ok = s.shell("subspace-cli install --pass " .. distro)
           if not ok then
-            io.stderr:write("[warn] '" .. distro .. "' — installation failed\n")
+            io.stderr:write("warning: '" .. distro .. "': installation failed\n")
           end
           return ok
         end))
@@ -60,10 +60,10 @@ function gen.plan(cfg, sync)
   for _, distro in ipairs(undeclared) do
     table.insert(changes, sync.change("-", "subspaces", distro, nil,
       function(_, s)
-        io.stderr:write("[apply] removing " .. distro .. " subspace...\n")
+        io.stderr:write("removing " .. distro .. " subspace...\n")
         local ok = s.shell("subspace-cli remove --pass " .. distro)
         if not ok then
-          io.stderr:write("[warn] '" .. distro .. "' — removal failed\n")
+          io.stderr:write("warning: '" .. distro .. "': removal failed\n")
         end
         return ok
       end))

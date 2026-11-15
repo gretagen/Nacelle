@@ -25,7 +25,7 @@ function gen.plan(cfg, sync)
   -- Parse /etc/passwd into all accounts plus the removable set.
   -- THREE captures: an earlier version wrote `name, _, uid` against a
   -- two-capture pattern, binding the UID to the throwaway and leaving uid
-  -- nil — no user was ever detected, so declared users were re-planned
+  -- nil: no user was ever detected, so declared users were re-planned
   -- (and useradd re-failed) on every single run.
   local passwd = sync.read_file("/etc/passwd") or ""
   local all = {}       -- name -> uid (every account, any uid)
@@ -68,11 +68,11 @@ function gen.plan(cfg, sync)
 
   -- Old array format guard: numeric keys mean the previous schema
   -- ({ {username = "alice"} }). Bail out entirely rather than planning
-  -- useradd/userdel for everything — nothing would match a keyed lookup,
+  -- useradd/userdel for everything: nothing would match a keyed lookup,
   -- which would otherwise delete every user on the system.
   for key in pairs(cfg.users) do
     if type(key) ~= "string" then
-      io.stderr:write("[warn] users: numeric keys found — old array format; "
+      io.stderr:write("warning: users: numeric keys found: old array format; "
         .. 'update definition to ["name"] = { ... }\n')
       return {}
     end
@@ -81,18 +81,18 @@ function gen.plan(cfg, sync)
   local desired = {}
   for name, spec in pairs(cfg.users) do
     if not valid_name(name) then
-      io.stderr:write("[warn] users: skipping invalid username '" .. tostring(name) .. "'\n")
+      io.stderr:write("warning: users: skipping invalid username '" .. tostring(name) .. "'\n")
     elseif type(spec) ~= "table" then
       -- protect an existing account of that name from removal, plan nothing
-      io.stderr:write("[warn] users: entry '" .. name .. "' must be a table, got "
-        .. type(spec) .. " — ignoring fields\n")
+      io.stderr:write("warning: users: entry '" .. name .. "' must be a table, got "
+        .. type(spec) .. ", ignoring fields\n")
       desired[name] = {}
     else
       desired[name] = spec
     end
   end
 
-  -- create missing users (existence checked by name for ANY uid — filtering
+  -- create missing users (existence checked by name for ANY uid: filtering
   -- detection by UID >= 1000 is what left existing users looking absent)
   for name, spec in pairs(desired) do
     if not all[name] then
@@ -101,7 +101,7 @@ function gen.plan(cfg, sync)
         if type(spec.groups) == "table" and #spec.groups > 0 then
           groups = " -G " .. table.concat(spec.groups, ",")
         else
-          io.stderr:write("[warn] users: '" .. name .. "' groups must be a non-empty list — ignoring\n")
+          io.stderr:write("warning: users: '" .. name .. "' groups must be a non-empty list, ignoring\n")
         end
       end
       local shell = "/bin/bash"
@@ -109,7 +109,7 @@ function gen.plan(cfg, sync)
         if type(spec.shell) == "string" then
           shell = spec.shell
         else
-          io.stderr:write("[warn] users: '" .. name .. "' shell must be a string — using /bin/bash\n")
+          io.stderr:write("warning: users: '" .. name .. "' shell must be a string, using /bin/bash\n")
         end
       end
       table.insert(changes, sync.change("+", "users", name, nil,
@@ -119,7 +119,7 @@ function gen.plan(cfg, sync)
     end
   end
 
-  -- converge groups + shell for users that already exist — create sets them
+  -- converge groups + shell for users that already exist: create sets them
   -- once at useradd, so without this pass editing definition.lua would never
   -- change an existing account (adding "input" to alice does nothing).
   -- Groups use REPLACE semantics: the declared list is the FULL desired
@@ -140,9 +140,9 @@ function gen.plan(cfg, sync)
             end
           end
           if bad then
-            io.stderr:write("[warn] users: '" .. name .. "' groups must be strings — ignoring\n")
+            io.stderr:write("warning: users: '" .. name .. "' groups must be strings, ignoring\n")
           elseif #want == 0 then
-            io.stderr:write("[warn] users: '" .. name .. "' groups must be a non-empty list — ignoring\n")
+            io.stderr:write("warning: users: '" .. name .. "' groups must be a non-empty list, ignoring\n")
           else
             -- validate against /etc/group first: a usermod -G with a
             -- nonexistent group fails on every sync, and under replace
@@ -152,8 +152,8 @@ function gen.plan(cfg, sync)
               if not exists[g] then missing[#missing + 1] = g end
             end
             if #missing > 0 then
-              io.stderr:write("[warn] users: '" .. name .. "' group(s) '" .. table.concat(missing, "', '")
-                .. "' do not exist in /etc/group — skipping group sync\n")
+              io.stderr:write("warning: users: '" .. name .. "' group(s) '" .. table.concat(missing, "', '")
+                .. "' do not exist in /etc/group, skipping group sync\n")
             else
               local cur = member_of[name]
               local same = (member_count[name] or 0) == #want
@@ -172,7 +172,7 @@ function gen.plan(cfg, sync)
             end
           end
         else
-          io.stderr:write("[warn] users: '" .. name .. "' groups must be a non-empty list — ignoring\n")
+          io.stderr:write("warning: users: '" .. name .. "' groups must be a non-empty list, ignoring\n")
         end
       end
       -- login shell
@@ -186,7 +186,7 @@ function gen.plan(cfg, sync)
               end))
           end
         else
-          io.stderr:write("[warn] users: '" .. name .. "' shell must be a string — ignoring\n")
+          io.stderr:write("warning: users: '" .. name .. "' shell must be a string, ignoring\n")
         end
       end
     end
@@ -199,7 +199,7 @@ function gen.plan(cfg, sync)
   for name, spec in pairs(desired) do
     if spec.ssh_keys ~= nil then
       if type(spec.ssh_keys) ~= "table" then
-        io.stderr:write("[warn] users: '" .. name .. "' ssh_keys must be a list — ignoring\n")
+        io.stderr:write("warning: users: '" .. name .. "' ssh_keys must be a list, ignoring\n")
       else
         local wanted = keys_content(spec.ssh_keys)
         local path = "/home/" .. name .. "/.ssh/authorized_keys"

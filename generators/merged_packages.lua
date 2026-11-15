@@ -1,7 +1,6 @@
 local gen = {}
 gen.name = "merged_packages"
 
-local subspace_dir = "/subspace"
 local manifest_dir = "/var/db"
 
 -- Distros that can be merged (glibc-based only)
@@ -16,7 +15,7 @@ local musl = { alpine = true }
 --
 -- The manifest is written by the commands themselves, not here: subspace-merge
 -- appends on a successful install and subspace-unmerge rewrites on a successful
--- removal. Writing it from gen.plan would be wrong — gen.plan only plans, and
+-- removal. Writing it from gen.plan would be wrong: gen.plan only plans, and
 -- sync.lua asks for confirmation afterwards. A declined prompt or a failed
 -- install would leave a manifest claiming the change was made, and the next run
 -- would see no diff and never retry. Letting the commands own it means the
@@ -45,9 +44,9 @@ function gen.plan(cfg, sync)
     if distro then
       -- Validate distro
       if musl[distro] then
-        io.stderr:write("[warn] merged_packages: skipping '" .. distro .. "' — musl distro cannot be merged onto glibc host\n")
+        io.stderr:write("warning: merged_packages: skipping '" .. distro .. "' cannot be merged onto the glibc host: musl distro\n")
       elseif not mergeable[distro] then
-        io.stderr:write("[warn] merged_packages: unknown distro '" .. distro .. "'\n")
+        io.stderr:write("warning: merged_packages: unknown distro '" .. distro .. "'\n")
       elseif not desired or #desired == 0 then
         -- empty list, nothing to do
       else
@@ -66,10 +65,10 @@ function gen.plan(cfg, sync)
           if not prev_merged[pkg] then
             table.insert(changes, sync.change("+", "merged-packages (" .. distro .. ")", pkg, nil,
               function(_, s)
-                io.stderr:write("[apply] merged-" .. distro .. ": installing " .. pkg .. " onto host\n")
+                io.stderr:write("merged-" .. distro .. ": installing " .. pkg .. " onto host\n")
                 local ok = s.shell("subspace-merge --pass --no-generation " .. distro .. " " .. pkg)
                 if not ok then
-                  io.stderr:write("[warn] '" .. pkg .. "' — install failed in " .. distro .. "\n")
+                  io.stderr:write("warning: '" .. pkg .. "': install failed in " .. distro .. "\n")
                 end
                 return ok
               end))
@@ -78,12 +77,12 @@ function gen.plan(cfg, sync)
             -- down afresh on the host, like any other rebuild
             table.insert(changes, sync.change("~",
               "merged-packages (" .. distro .. ")", pkg,
-              "reapply : subspace-merge",
+              "reapply: subspace-merge",
               function(_, s)
-                io.stderr:write("[apply] merged-" .. distro .. ": remerging " .. pkg .. " onto host\n")
+                io.stderr:write("merged-" .. distro .. ": remerging " .. pkg .. " onto host\n")
                 local ok = s.shell("subspace-merge --pass --no-generation " .. distro .. " " .. pkg)
                 if not ok then
-                  io.stderr:write("[warn] '" .. pkg .. "': remerge failed in " .. distro .. "\n")
+                  io.stderr:write("warning: '" .. pkg .. "': remerge failed in " .. distro .. "\n")
                 end
                 return ok
               end))
@@ -102,10 +101,10 @@ function gen.plan(cfg, sync)
         for _, pkg in ipairs(undeclared) do
           table.insert(changes, sync.change("-", "merged-packages (" .. distro .. ")", pkg, nil,
             function(_, s)
-              io.stderr:write("[apply] merged-" .. distro .. ": removing " .. pkg .. " from host\n")
+              io.stderr:write("merged-" .. distro .. ": removing " .. pkg .. " from host\n")
               local ok = s.shell("subspace-unmerge --pass --no-generation " .. distro .. " " .. pkg)
               if not ok then
-                io.stderr:write("[warn] '" .. pkg .. "' — removal failed in " .. distro .. "\n")
+                io.stderr:write("warning: '" .. pkg .. "': removal failed in " .. distro .. "\n")
               end
               return ok
             end))

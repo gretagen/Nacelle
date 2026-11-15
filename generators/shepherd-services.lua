@@ -2,14 +2,14 @@ local gen = {}
 gen.name = "shepherd-services"
 
 -- Shepherd services: ensure each entry in ["shepherd-services"] has a
--- drop-in definition under /etc/shepherd.d/*.scm. Add-only — services
+-- drop-in definition under /etc/shepherd.d/*.scm. Add-only: services
 -- dropped from the list are left alone (not stopped), like every sibling.
 --
 -- The drop-ins are self-registering (haliade-service! is defined by the
 -- base /etc/shepherd.scm that the iniswap handler generates). When shepherd
 -- is really PID 1, a new or changed drop-in is applied live with
 -- 'herd load root' and then started (repower also restarts it). During the
--- swap window — shepherd declared in limine.conf but not yet PID 1 — there
+-- swap window: shepherd declared in limine.conf but not yet PID 1. There
 -- is no shepherd to talk to, so the file is written and takes effect on the
 -- next boot, exactly like the universal shutdown wrapper skips init tools
 -- that cannot work yet.
@@ -28,7 +28,7 @@ end
 -- Getty drop-in template (@NAME@/@ARGV@ placeholders): rendered text stays
 -- byte-identical with shepherd-services/shepherd/dropins/agetty.*.
 local getty_template = [=[
-;; @NAME@ — login prompt. No --noclear (agetty must clear before
+;; @NAME@: login prompt. No --noclear (agetty must clear before
 ;; prompting; with the flag a supervisor restart stacks a second prompt).
 ;; The bounded bus wait replaces dinit's soft waits-for: the prompt comes up
 ;; once the boot daemons are up, or after 30 seconds either way (fails-open,
@@ -58,7 +58,7 @@ end
 
 local dropins = {
   dbus = [=[
-;; dbus — D-Bus system message bus.
+;; dbus: D-Bus system message bus.
 ;; Mirrors the dinit service: chown /run/dbus to messagebus, then run in the
 ;; foreground (--nofork makes dbus-daemon bind the system bus socket itself).
 (haliade-service!
@@ -74,7 +74,7 @@ local dropins = {
 ]=],
 
   connmand = [=[
-;; connmand — Connection Manager (ethernet-first, as in OpenRC/dinit).
+;; connmand: Connection Manager (ethernet-first, as in OpenRC/dinit).
 ;; No bus-wait wrapper: connmand tolerates a late bus and retries on its own;
 ;; the #:requirement only orders it after dbus, like dinit's depends-on.
 (haliade-service!
@@ -88,7 +88,7 @@ local dropins = {
 ]=],
 
   iwd = [=[
-;; iwd — iNet Wireless Daemon.
+;; iwd: iNet Wireless Daemon.
 ;; Mirrors the runit/dinit services: unblock rfkill, prepare /var/lib/iwd,
 ;; bind-mount it over /usr/var/lib/iwd, export STATE_DIRECTORY, then run
 ;; iwd. The bounded bus wait is the fails-open stand-in for dinit's
@@ -106,7 +106,7 @@ local dropins = {
 ]=],
 
   elogind = [=[
-;; elogind — user seat manager (foreground, as in OpenRC/runit/dinit).
+;; elogind: user seat manager (foreground, as in OpenRC/runit/dinit).
 ;; /run/systemd is already created by sysinit.sh; the bounded bus wait is
 ;; the fails-open stand-in for dinit's pipefd readiness on dbus.
 (haliade-service!
@@ -122,7 +122,7 @@ local dropins = {
 ]=],
 
   sshd = [=[
-;; sshd — OpenSSH server, foreground with stderr logging (-D -e), same argv
+;; sshd: OpenSSH server, foreground with stderr logging (-D -e), same argv
 ;; as the runit/dinit services; the -t precheck and /run/sshd mirror dinit's
 ;; sh -c wrapper. No bus dependency, like dinit (depends-on sysinit only).
 (haliade-service!
@@ -162,7 +162,7 @@ function gen.plan(cfg, sync)
       local script = dropin_for(svc)
       if script then
         table.insert(changes, sync.change(already and "~" or "+", "shepherd-services", svc,
-          already and "reapply : rewrite drop-in" or "write drop-in",
+          already and "reapply: rewrite drop-in" or "write drop-in",
           function()
             sync.shell("mkdir -p " .. shepherd_dir)
             local path = shepherd_dir .. "/" .. svc .. ".scm"
@@ -188,7 +188,7 @@ function gen.plan(cfg, sync)
             return true
           end))
       else
-        io.stderr:write("[warn] shepherd-services: no shepherd template for '" .. svc .. "', skipping\n")
+        io.stderr:write("warning: shepherd-services: no shepherd template for '" .. svc .. "', skipping\n")
       end
     end
   end

@@ -9,7 +9,7 @@ function gen.plan(cfg, sync)
 
   return {
     sync.change("~", "timezone", "/etc/localtime",
-      current_link .. "  →  " .. target,
+      current_link .. "  ->  " .. target,
       function()
         sync.shell("ln -sf '" .. target .. "' /etc/localtime")
       end),

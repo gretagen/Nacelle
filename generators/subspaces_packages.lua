@@ -53,7 +53,7 @@ local distros = {
 -- for confirmation afterwards. Writing the manifest during planning would mean
 -- a declined prompt or a failed install left the manifest claiming the change
 -- was made, so the next run would see no diff and never retry. subspace-run
--- reports what is actually installed, which is the real source of truth here —
+-- reports what is actually installed, which is the real source of truth here:
 -- the manifest only decides what to *remove*.
 local function read_manifest(path)
   local declared = {}
@@ -104,10 +104,10 @@ function gen.plan(cfg, sync)
         if not installed[pkg] then
           table.insert(changes, sync.change("+", "subspace-packages (" .. distro .. ")", pkg, nil,
             function(_, s)
-              io.stderr:write("[apply] " .. distro .. ": installing " .. pkg .. "\n")
+              io.stderr:write("" .. distro .. ": installing " .. pkg .. "\n")
               local ok = s.shell("subspace-run " .. distro .. " " .. cmds.install .. " " .. pkg)
               if not ok then
-                io.stderr:write("[warn] '" .. pkg .. "' — install failed in " .. distro .. "\n")
+                io.stderr:write("warning: '" .. pkg .. "': install failed in " .. distro .. "\n")
               end
               return ok
             end))
@@ -118,12 +118,12 @@ function gen.plan(cfg, sync)
           -- is the subspace equivalent of rebuilding instead of skipping.
           table.insert(changes, sync.change("~",
             "subspace-packages (" .. distro .. ")", pkg,
-            "reapply : " .. cmds.install,
+            "reapply: " .. cmds.install,
             function(_, s)
-              io.stderr:write("[apply] " .. distro .. ": reapplying " .. pkg .. "\n")
+              io.stderr:write("" .. distro .. ": reapplying " .. pkg .. "\n")
               local ok = s.shell("subspace-run " .. distro .. " " .. cmds.install .. " " .. pkg)
               if not ok then
-                io.stderr:write("[warn] '" .. pkg .. "': reapply failed in " .. distro .. "\n")
+                io.stderr:write("warning: '" .. pkg .. "': reapply failed in " .. distro .. "\n")
               end
               return ok
             end))
@@ -135,18 +135,17 @@ function gen.plan(cfg, sync)
         if not desired_set[pkg] then
           table.insert(changes, sync.change("-", "subspace-packages (" .. distro .. ")", pkg, nil,
             function(_, s)
-              io.stderr:write("[apply] " .. distro .. ": removing " .. pkg .. "\n")
+              io.stderr:write("" .. distro .. ": removing " .. pkg .. "\n")
               local ok = s.shell("subspace-run " .. distro .. " " .. cmds.remove .. " " .. pkg)
               if not ok then
-                io.stderr:write("[warn] '" .. pkg .. "' — removal failed in " .. distro .. "\n")
+                io.stderr:write("warning: '" .. pkg .. "': removal failed in " .. distro .. "\n")
               end
               return ok
             end))
         end
       end
-
-      end
     end
+  end
 
   return changes
 end

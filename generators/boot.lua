@@ -24,7 +24,7 @@ function gen.plan(cfg, sync)
   end
 
   -- wallpaper (only if key already present or explicitly set)
-  -- NOTE: [^\n]* not .* — Lua's dot matches newlines, so .* here would
+  -- NOTE: [^\n]* not .*: Lua's dot matches newlines, so .* here would
   -- swallow the rest of the file (entries and cmdline included).
   if cfg.boot.wallpaper and cfg.boot.wallpaper ~= "" then
     if new:match("wallpaper:") then

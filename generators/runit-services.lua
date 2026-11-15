@@ -3,7 +3,7 @@ gen.name = "runit-services"
 
 -- Runit services: ensure each entry in ["runit-services"] has a supervised
 -- service directory under /etc/service with an executable run script.
--- Add-only — services dropped from the list are left alone (not stopped).
+-- Add-only: services dropped from the list are left alone (not stopped).
 --
 -- Directory names must match what the rootfs ships (agetty.tty1, not
 -- agetty-tty1): renaming the dir would create a second getty competing
@@ -83,7 +83,7 @@ exec /usr/sbin/connmand -n
 ]],
 }
 
--- agetty: mirror the shipped run scripts — start LAST (bounded 30s wait on
+-- agetty: mirror the shipped run scripts: start LAST (bounded 30s wait on
 -- the supervised daemons) so the login prompt never overlaps boot activity.
 local function agetty_script(tty)
   return "#!/bin/sh\n" ..
@@ -137,7 +137,7 @@ function gen.plan(cfg, sync)
       local script = runit_script_for(svc)
       if script then
         table.insert(changes, sync.change(already and "~" or "+", "runit-services", svc,
-          already and "reapply : rewrite run script" or "create runit service",
+          already and "reapply: rewrite run script" or "create runit service",
           function()
             local svc_dir = sv_dir .. "/" .. dir
             sync.shell("mkdir -p " .. svc_dir)
@@ -145,7 +145,7 @@ function gen.plan(cfg, sync)
             return sync.shell("chmod +x " .. svc_dir .. "/run")
           end))
       else
-        io.stderr:write("[warn] runit-services: no runit template for '" .. svc .. "', skipping\n")
+        io.stderr:write("warning: runit-services: no runit template for '" .. svc .. "', skipping\n")
       end
     end
   end

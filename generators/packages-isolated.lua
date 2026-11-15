@@ -22,11 +22,11 @@ end
 -- store in place (--isolate semantics), then -ReProvide reinstalls it there.
 local function rebuild(s, q)
   if not s.shell("zeta -Solve --pass --isolate " .. q) then
-    io.stderr:write("[warn] " .. q .. ": zeta -Solve --isolate failed\n")
+    io.stderr:write("warning: " .. q .. ": zeta -Solve --isolate failed\n")
     return false
   end
   if not s.shell("zeta -ReProvide --pass --force --isolate " .. q) then
-    io.stderr:write("[warn] " .. q .. ": zeta -ReProvide --isolate failed\n")
+    io.stderr:write("warning: " .. q .. ": zeta -ReProvide --isolate failed\n")
     return false
   end
   return true
@@ -55,7 +55,7 @@ function gen.plan(cfg, sync)
     if valid_name(pkg) then
       desired[pkg] = true
     else
-      io.stderr:write("[warn] skipping invalid package name '" .. tostring(pkg) .. "'\n")
+      io.stderr:write("warning: skipping invalid package name '" .. tostring(pkg) .. "'\n")
     end
   end
 
@@ -67,7 +67,7 @@ function gen.plan(cfg, sync)
           local q = shquote(pkg)
           if not tracked[pkg] then
             if not s.shell("zeta -Provide --pass --force --isolate " .. q) then
-              io.stderr:write("[warn] '" .. pkg .. "' — not found, network error, or build failure\n")
+              io.stderr:write("warning: '" .. pkg .. "': not found, network error, or build failure\n")
               return false
             end
           elseif sync.repower then
@@ -87,7 +87,7 @@ function gen.plan(cfg, sync)
       if desired[pkg] and declared[pkg] then
         local q = shquote(pkg)
         table.insert(changes, sync.change("~", "packages-isolated", pkg,
-          "rebuild : zeta -Solve --isolate, then -ReProvide --isolate",
+          "rebuild: zeta -Solve --isolate, then -ReProvide --isolate",
           function(_, s) return rebuild(s, q) end))
       end
     end
@@ -105,7 +105,7 @@ function gen.plan(cfg, sync)
       function(_, s)
         if tracked[pkg] then
           if not s.shell("zeta -Delete --pass --force --isolate " .. shquote(pkg)) then
-            io.stderr:write("[warn] '" .. pkg .. "' — could not be removed\n")
+            io.stderr:write("warning: '" .. pkg .. "': could not be removed\n")
             return false
           end
         end

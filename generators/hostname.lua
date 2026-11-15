@@ -9,11 +9,11 @@ function gen.plan(cfg, sync)
 
   return {
     sync.change("~", "hostname", "/etc/hostname",
-      current and (current .. "  →  " .. cfg.hostname) or "set to " .. cfg.hostname,
+      current and (current .. "  ->  " .. cfg.hostname) or "set to " .. cfg.hostname,
       function()
         sync.write_file("/etc/hostname", cfg.hostname .. "\n")
         sync.write_file("/etc/conf.d/hostname",
-          "# managed by haliade-synchronize\nhostname=\"" .. cfg.hostname .. "\"\n")
+          "# managed by nacelle\nhostname=\"" .. cfg.hostname .. "\"\n")
       end),
   }
 end

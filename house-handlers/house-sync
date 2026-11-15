@@ -1,5 +1,5 @@
 #!/bin/bash
-# house-sync — apply home/dotfile configuration from house.lua
+# house-sync: apply home/dotfile configuration from house.lua
 set -e
 
 if [ "$EUID" -ne 0 ]; then

@@ -2,7 +2,7 @@ local gen = {}
 gen.name = "dinit-services"
 
 -- Dinit services: ensure each entry in ["dinit-services"] is enabled via a
--- symlink in /etc/dinit.d/boot.d. Add-only — services dropped from the list
+-- symlink in /etc/dinit.d/boot.d. Add-only: services dropped from the list
 -- are left enabled (not disabled).
 --
 -- Service definitions ship in the rootfs (/etc/dinit.d/<name>); this
@@ -25,13 +25,13 @@ function gen.plan(cfg, sync)
       -- already enabled
     elseif sync.read_file(defs_dir .. "/" .. svc) then
       table.insert(changes, sync.change(already and "~" or "+", "dinit-services", svc,
-        already and "reapply : enable in boot.d" or "enable in boot.d",
+        already and "reapply: enable in boot.d" or "enable in boot.d",
         function()
           sync.shell("mkdir -p " .. boot_dir)
           return sync.shell("ln -sfn ../" .. svc .. " " .. boot_dir .. "/" .. svc)
         end))
     else
-      io.stderr:write("[warn] dinit-services: no dinit definition for '" .. svc .. "', skipping\n")
+      io.stderr:write("warning: dinit-services: no dinit definition for '" .. svc .. "', skipping\n")
     end
   end
 

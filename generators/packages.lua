@@ -20,11 +20,11 @@ end
 -- -Solve, then reinstall the package itself with -ReProvide.
 local function rebuild(s, q)
   if not s.shell("zeta -Solve --pass " .. q) then
-    io.stderr:write("[warn] " .. q .. ": zeta -Solve failed\n")
+    io.stderr:write("warning: " .. q .. ": zeta -Solve failed\n")
     return false
   end
   if not s.shell("zeta -ReProvide --pass --force " .. q) then
-    io.stderr:write("[warn] " .. q .. ": zeta -ReProvide failed\n")
+    io.stderr:write("warning: " .. q .. ": zeta -ReProvide failed\n")
     return false
   end
   return true
@@ -53,7 +53,7 @@ function gen.plan(cfg, sync)
     if valid_name(pkg) then
       desired[pkg] = true
     else
-      io.stderr:write("[warn] skipping invalid package name '" .. tostring(pkg) .. "'\n")
+      io.stderr:write("warning: skipping invalid package name '" .. tostring(pkg) .. "'\n")
     end
   end
 
@@ -65,7 +65,7 @@ function gen.plan(cfg, sync)
           local q = shquote(pkg)
           if not tracked[pkg] then
             if not s.shell("zeta -Provide --pass --force " .. q) then
-              io.stderr:write("[warn] '" .. pkg .. "' — not found, network error, or build failure\n")
+              io.stderr:write("warning: '" .. pkg .. "': not found, network error, or build failure\n")
               return false
             end
           elseif sync.repower then
@@ -88,7 +88,7 @@ function gen.plan(cfg, sync)
       if desired[pkg] and declared[pkg] then
         local q = shquote(pkg)
         table.insert(changes, sync.change("~", "packages-haliade", pkg,
-          "rebuild : zeta -Solve, then -ReProvide",
+          "rebuild: zeta -Solve, then -ReProvide",
           function(_, s) return rebuild(s, q) end))
       end
     end
@@ -106,7 +106,7 @@ function gen.plan(cfg, sync)
       function(_, s)
         if tracked[pkg] then
           if not s.shell("zeta -Delete --pass --force " .. shquote(pkg)) then
-            io.stderr:write("[warn] '" .. pkg .. "' — could not be removed\n")
+            io.stderr:write("warning: '" .. pkg .. "': could not be removed\n")
             return false
           end
         end

@@ -1,5 +1,9 @@
+-- Pretty much the same thing as the system nacelle, but for your files
 -- Install prefix, overridable so a working tree can be tested without a
 -- repack (NACELLE_LIB=/home/gretagen/nacelle ./nacelle spin house).
+local date = os.date("%Y-%m-%d")
+-- already explained this in sync.lua in system nacelle
+
 local LIB = os.getenv("NACELLE_LIB")
 if not LIB or LIB == "" then LIB = "/usr/lib/nacelle" end
 
@@ -22,7 +26,7 @@ house_sync.repower = os.getenv("NACELLE_REPOWER") ~= nil
 -- signal. The child's signal-death is therefore the only evidence of an
 -- interrupt, and it is what lets the apply loop tell "user cancelled" from
 -- "command failed". A Ctrl+C landing between commands still reaches us with
--- the default disposition and kills the process outright — that is correct
+-- the default disposition and kills the process outright; that is correct
 -- and needs no flag.
 house_sync.interrupted = false
 
@@ -40,13 +44,12 @@ local VERBOSE = os.getenv("NACELLE_VERBOSE") ~= nil
 
 function house_sync.vprint(...)
   if not VERBOSE then return end
-  io.stderr:write("[v] ")
   io.stderr:write(string.format(...))
   io.stderr:write("\n")
 end
 
 function house_sync.eprint(fmt, ...)
-  io.stderr:write("[error] ")
+  io.stderr:write("error: ")
   io.stderr:write(string.format(fmt, ...))
   io.stderr:write("\n")
 end
@@ -56,12 +59,12 @@ function house_sync.read_file(path)
   house_sync.vprint("read_file %s", path)
   local f, err = io.open(path, "r")
   if not f then
-    house_sync.vprint("  → not found")
+    house_sync.vprint("  not found")
     return nil
   end
   local c = f:read("*a")
   f:close()
-  house_sync.vprint("  → %d bytes", #c)
+  house_sync.vprint("  %d bytes", #c)
   return c
 end
 
@@ -74,7 +77,7 @@ end
 function house_sync.ensure_dir(dir)
   local f = io.open(dir, "r")
   if f then f:close(); return true end
-  io.stderr:write("[warn] creating directory: " .. dir .. "\n")
+  io.stderr:write("creating directory: " .. dir .. "\n")
   return house_sync.shell("mkdir -p '" .. dir .. "'")
 end
 
@@ -107,13 +110,13 @@ function house_sync.shell(cmd)
   house_sync.vprint("shell: %s", cmd)
   local ok, how, code = os.execute(cmd .. " 2>/dev/null")
   if child_interrupted(how, code) then
-    house_sync.vprint("  → interrupted (how=%s code=%s)", tostring(how), tostring(code))
+    house_sync.vprint("  interrupted (how=%s code=%s)", tostring(how), tostring(code))
     house_sync.interrupted = true
     return false
   end
   -- false, never nil: generators return this straight out of their
   -- apply_fn, and house_sync.apply tells a failure from success by
-  -- `result == false` — nil would be read as success.
+  -- `result == false`; nil would be read as success.
   return ok or false
 end
 
@@ -135,7 +138,7 @@ function house_sync.shell_live(cmd)
   house_sync.vprint("bash: %s", cmd)
   local ok, how, code = os.execute("/bin/bash -c " .. house_sync.shell_quote(cmd))
   if child_interrupted(how, code) then
-    house_sync.vprint("  → interrupted (how=%s code=%s)", tostring(how), tostring(code))
+    house_sync.vprint("  interrupted (how=%s code=%s)", tostring(how), tostring(code))
     house_sync.interrupted = true
     return false
   end
@@ -188,7 +191,7 @@ end
 -- load house generators
 --
 -- Which ones run is decided by /etc/nacelle/houses/enabled_house_generators.lua
--- (variable: enabled_house_generators), read by plugins.lua — the same module
+-- (variable: enabled_house_generators), read by plugins.lua, the same module
 -- the system category asks, so house_sync owns no list of its own. loadfile
 -- rather than require: package.path here has no $LIB/?.lua, and
 -- require("config") above must keep resolving to this directory's house
@@ -223,7 +226,7 @@ function house_sync.collect(cfg)
     house_sync.vprint("planner '%s' running...", name)
     local ok, plans = pcall(gen.plan, cfg, house_sync)
     if ok and plans then
-      house_sync.vprint("  → %d changes", #plans)
+      house_sync.vprint("  %d changes", #plans)
       for _, c in ipairs(plans) do
         c.seq = seq
         seq = seq + 1
@@ -248,7 +251,7 @@ end
 -- print summary
 function house_sync.summary(changes)
   if #changes == 0 then
-    print("The House seems to be already synchronized, no changes required.")
+    print("House nacelle seems to be already synchronized, no need to change anything.")
     return
   end
   local groups = {}
@@ -261,10 +264,10 @@ function house_sync.summary(changes)
   -- worth stating is which mode the run is in (if any).
   local modes = {}
   if house_sync.repower then
-    modes[#modes + 1] = "  mode: repower (reapplying every house change)"
+    modes[#modes + 1] = "  mode: repower "
   end
   if house_sync.unprivileged then
-    modes[#modes + 1] = "  mode: unprivileged (root-only changes will be skipped)"
+    modes[#modes + 1] = "  mode: unprivileged "
   end
   if #modes > 0 then
     print()
@@ -279,7 +282,7 @@ function house_sync.summary(changes)
       local sym = c.type == "+" and " [+] " or c.type == "-" and " [-] " or " [~] "
       local line = "    " .. sym .. c.target
       if c.requires_root then
-        line = line .. "  (requires root : will be skipped)"
+        line = line .. "  (requires superuser privileges: will be skipped)"
       end
       print(line)
       if c.detail then
@@ -301,36 +304,36 @@ function house_sync.apply(changes)
   for i, c in ipairs(changes) do
     local sym = c.type == "+" and "[+]" or c.type == "-" and "[-]" or "[~]"
     if c.requires_root then
-      io.stderr:write(string.format("[skip] %s %s/%s (requires root)\n", sym, c.section or "?", c.target))
+      io.stderr:write(string.format("skipping %s %s/%s (requires su)\n", sym, c.section or "?", c.target))
       skipped = skipped + 1
     else
-      io.stderr:write(string.format("[apply] %s %s/%s\n", sym, c.section or "?", c.target))
+      io.stderr:write(string.format("applying %s %s/%s\n", sym, c.section or "?", c.target))
       if c.apply_fn then
         local ok, result = pcall(c.apply_fn, c, house_sync)
         if not ok then
-          io.stderr:write("[error] " .. tostring(result) .. "\n")
+          io.stderr:write("error: " .. tostring(result) .. "\n")
           failures = failures + 1
         elseif result == false then
           -- an interrupt shows up as a failed command too (the shell
           -- helpers return false): the loop breaks on the flag, so no
           -- further change is attempted and this failure is just the
           -- interrupted one
-          io.stderr:write("[error] command failed\n")
+          io.stderr:write("error: command failed\n")
           failures = failures + 1
         else
-          io.stderr:write("[ok] " .. sym .. " " .. (c.section or "?") .. "/" .. c.target .. "\n")
+          io.stderr:write("ok " .. sym .. " " .. (c.section or "?") .. "/" .. c.target .. "\n")
         end
       end
     end
     if house_sync.interrupted then
       io.stderr:write(string.format(
-        "[interrupt] house synchronization aborted : %d of %d change(s) applied, %d remaining\n",
+        "house synchronization aborted: %d of %d change(s) applied, %d remaining\n",
         i - 1, #changes, #changes - i + 1))
       return true, failures, skipped, true
     end
   end
   if failures > 0 then
-    io.stderr:write(string.format("\n[warn] %d change(s) failed : review errors above\n", failures))
+    io.stderr:write(string.format("The nacelle hit %d error(s) while applying changes, review them above.\n", failures))
   end
   return true, failures, skipped, false
 end
@@ -340,7 +343,7 @@ if arg and arg[0] and arg[0]:match("house_sync%.lua$") then
   local uid = tonumber((house_sync.shell_output("id -u")))
   house_sync.unprivileged = (uid ~= 0)
   if house_sync.unprivileged then
-    io.stderr:write("note: running without privileges : changes to system paths will be skipped, and no generation will be created.\n")
+    io.stderr:write("note: running without privileges: changes to system paths will be skipped, and no generation will be created.\n")
   end
 
   local cfg_path = arg[1] or "/etc/nacelle/houses/house.lua"
@@ -364,12 +367,12 @@ if arg and arg[0] and arg[0]:match("house_sync%.lua$") then
       if not c.requires_root then applicable = applicable + 1 end
     end
     if applicable == 0 then
-      print(#changes .. " change(s) require root : re-run with superuser privileges.")
+      print(#changes .. " require su, so re-run with superuser privileges.")
       os.exit(0)
     end
   end
 
-  io.write("Proceed with house synchronization? [y/N]: ")
+  io.write("Synchronize the house nacelle? [y/N]: ")
   io.flush()
   local answer = io.read()
   local ok = answer and (answer:lower() == "y" or answer:lower() == "yes")
@@ -378,22 +381,22 @@ if arg and arg[0] and arg[0]:match("house_sync%.lua$") then
     os.exit(0)
   end
 
-  print("Applying house changes...")
+  print("Synchronizing.")
   local _, failures, skipped, interrupted = house_sync.apply(changes)
   if interrupted then
-    -- Ctrl+C during a command : counts are on the [interrupt] line above.
+    -- Ctrl+C during a command: the counts are on the aborted line above.
     -- Exit 130 (128 + SIGINT) so the shell sees a conventional interrupt
-    -- status, and create no generation : the run is partial.
-    print("Interrupted : house synchronization aborted.")
-    io.stderr:write("No new generation has been created : re-run nacelle to apply the remaining changes.\n")
+    -- status, and create no generation: the run is partial.
+    print("Interrupted: house synchronization aborted.")
+    io.stderr:write("Run the nacelle again to apply the remaining changes.\n")
     os.exit(130)
   elseif failures and failures > 0 then
     print("House synchronization finished with " .. failures .. " failure(s).")
-    io.stderr:write("No new generation created : fix errors and re-run, or boot a previous generation.\n")
+    io.stderr:write("No new generation has been created: fix the errors above first.\n")
   elseif house_sync.unprivileged then
-    print("House synchronization completed (unprivileged : no generation created).")
+    print("House synchronization completed (but unprivileged: so no generation was created).")
     if skipped and skipped > 0 then
-      print(skipped .. " change(s) were skipped : re-run with superuser privileges to apply them.")
+      print(skipped .. " change(s) were skipped: re-run with superuser privileges to apply them.")
     end
   else
     -- NACELLE_NO_GENERATION comes from the CLI's --no-generation: apply
@@ -403,13 +406,13 @@ if arg and arg[0] and arg[0]:match("house_sync%.lua$") then
     else
       print(house_sync.repower and "Creating post-repower house generation..."
         or "Creating post-sync house generation...")
-      local label = house_sync.repower and "post-repower house" or "post-sync house"
+      local label = house_sync.repower and "post-repower of house nacelle on " .. date or "post-sync of house nacelle on " .. date
       if not house_sync.shell("chronos create '" .. label .. "'") then
-        io.stderr:write("[warn] chronos create failed : house is synced but no new boot entry was added.\n")
-        io.stderr:write("        Check btrfs layout (@ / @snapshots) and run: chronos create '" .. label .. "'\n")
+        io.stderr:write("The nacelle synchronized the house, but couldn't create a generation.\n")
+        io.stderr:write("You can add one by hand if you want?\n")
       end
     end
-    print("House synchronization completed.")
+    print("Nacelle house sync complete.")
   end
 end
 

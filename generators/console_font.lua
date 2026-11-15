@@ -2,7 +2,7 @@ local gen = {}
 gen.name = "console_font"
 
 -- Console font: converge BOTH config shapes, because the inits read
--- different files — OpenRC/runit/dinit apply the font via the kbd
+-- different files: OpenRC/runit/dinit apply the font via the kbd
 -- scripts reading /etc/conf.d/consolefont; systemd's
 -- systemd-vconsole-setup reads FONT= from /etc/vconsole.conf. Writing
 -- both keeps the declared font identical across init swaps.
@@ -16,7 +16,7 @@ function gen.plan(cfg, sync)
 
   if sync.differs(current, cfg.console_font) then
     table.insert(changes, sync.change("~", "console_font", "/etc/conf.d/consolefont",
-      current .. "  →  " .. cfg.console_font,
+      current .. "  ->  " .. cfg.console_font,
       function()
         local new = content:gsub('consolefont%s*=%s*"[^"]*"',
           'consolefont="' .. cfg.console_font .. '"')
@@ -32,7 +32,7 @@ function gen.plan(cfg, sync)
 
   if sync.differs(cur_vc, cfg.console_font) then
     table.insert(changes, sync.change("~", "console_font", "/etc/vconsole.conf",
-      (cur_vc or "(unset)") .. "  →  " .. cfg.console_font,
+      (cur_vc or "(unset)") .. "  ->  " .. cfg.console_font,
       function()
         local new
         if vc:find("FONT%s*=") then

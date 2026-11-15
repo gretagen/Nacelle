@@ -11,7 +11,7 @@ function gen.plan(cfg, sync)
 
   return {
     sync.change("~", "hwclock", "/etc/conf.d/hwclock",
-      current .. "  →  " .. value,
+      current .. "  ->  " .. value,
       function()
         local new = content:gsub('clock%s*=%s*"[^"]*"', 'clock="' .. value .. '"')
         if not content:find('clock%s*=') then

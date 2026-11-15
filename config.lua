@@ -89,9 +89,9 @@ local PLUGIN_CONFIG_DIR = "/etc/nacelle/plugin-configs"
 --   schema["nixpkgs"]   = "table"
 --
 -- Later files win on key collisions. Files may add new keys but may NOT
--- replace or nil out any key declared by core (base_defaults/base_schema) —
+-- replace or nil out any key declared by core (base_defaults/base_schema),
 -- that keeps a plugin from silently clobbering the built-in schema.
--- Missing dir → no-op. Broken file → hard error naming it.
+-- Missing dir: no-op. Broken file: hard error naming it.
 local function apply_plugin_configs(dir, defaults, schema)
   if not dir or dir == "" then return true end
   local p = io.popen("ls -1 " .. dir .. " 2>/dev/null")

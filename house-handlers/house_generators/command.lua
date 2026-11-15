@@ -1,4 +1,4 @@
--- command.lua — house generator: run user-defined shell commands in order
+-- command.lua: house generator: run user-defined shell commands in order
 --
 -- Configuration (house.lua):
 --   command = {
@@ -52,7 +52,7 @@ function gen.plan(cfg, house_sync)
       end
 
       if skip_reason then
-        house_sync.vprint("command[%d]: %s — skipped (%s)", i, display, skip_reason)
+        house_sync.vprint("command[%d]: %s: skipped (%s)", i, display, skip_reason)
       else
         local parts = {}
         if creates then table.insert(parts, "creates: " .. creates) end

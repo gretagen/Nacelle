@@ -1,4 +1,4 @@
--- media.lua — house generator: download files from the internet with curl
+-- media.lua: house generator: download files from the internet with curl
 --
 -- Configuration (house.lua):
 --   media = {

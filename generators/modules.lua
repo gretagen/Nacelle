@@ -7,7 +7,7 @@ function gen.plan(cfg, sync)
 
   if #cfg.modules == 0 then return {} end
 
-  local desired = "-- managed by haliade-synchronize\n"
+  local desired = "-- managed by nacelle\n"
   for _, mod in ipairs(cfg.modules) do
     desired = desired .. "module=\"" .. mod .. "\"\n"
   end

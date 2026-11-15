@@ -2,7 +2,7 @@ local gen = {}
 gen.name = "rc-services"
 
 -- OpenRC services: ensure each entry in ["rc-services"] is in the default
--- runlevel. Add-only — services dropped from the list are left enabled.
+-- runlevel. Add-only: services dropped from the list are left enabled.
 
 function gen.plan(cfg, sync)
   local changes = {}
@@ -22,10 +22,10 @@ function gen.plan(cfg, sync)
       -- already enabled
     elseif sync.read_file("/etc/init.d/" .. svc) then
       table.insert(changes, sync.change(already and "~" or "+", "rc-services", svc,
-        already and "reapply : rc-update add" or "add to default runlevel",
+        already and "reapply: rc-update add" or "add to default runlevel",
         function() return sync.shell("rc-update add " .. svc .. " default") end))
     else
-      io.stderr:write("[warn] rc-services: no OpenRC init script for '" .. svc .. "', skipping\n")
+      io.stderr:write("warning: rc-services: no OpenRC init script for '" .. svc .. "', skipping\n")
     end
   end
 

@@ -5,7 +5,7 @@ gen.name = "init"
 -- detect_current_init (*/openrc-init, */runit-init, */dinit, */systemd,
 -- */shepherd).
 -- Note dinit has no -init wrapper: iniswap writes init=/sbin/dinit, and
--- systemd and shepherd are their own PID1 (/sbin/systemd, /sbin/shepherd) —
+-- systemd and shepherd are their own PID1 (/sbin/systemd, /sbin/shepherd):
 -- matching by suffix keeps /sbin vs /usr/sbin irrelevant.
 -- /systemd$ must not collide with /dinit$ (no path suffix does today).
 local valid_inits = { "openrc", "runit", "dinit", "systemd", "shepherd" }
@@ -21,7 +21,7 @@ local init_suffixes = {
 -- Detect the init declared in limine.conf. Returns "openrc" when no init=
 -- param is present (the default), or "unknown" when a param exists but
 -- matches nothing we know. Anchored to start/whitespace so params whose
--- name merely ends in "init=" (e.g. "reinit=5") don't false-match — the
+-- name merely ends in "init=" (e.g. "reinit=5") don't false-match: the
 -- same anchoring boot.lua uses when preserving the param.
 local function detect_declared(content)
   local line = content:match("cmdline:%s*(%S[^\n]*)")
@@ -68,7 +68,7 @@ function gen.plan(cfg, sync)
     if name == desired then is_valid = true break end
   end
   if not is_valid then
-    io.stderr:write("[warn] init: invalid init '" .. tostring(desired)
+    io.stderr:write("warning: init: invalid init '" .. tostring(desired)
       .. "' in config (valid: " .. table.concat(valid_inits, ", ") .. "), skipping\n")
     return {}
   end
@@ -76,7 +76,7 @@ function gen.plan(cfg, sync)
   local limine = "/boot/limine.conf"
   local content = sync.read_file(limine)
   if not content then
-    io.stderr:write("[warn] init: cannot read " .. limine .. "\n")
+    io.stderr:write("warning: init: cannot read " .. limine .. "\n")
     return {}
   end
 
@@ -87,7 +87,7 @@ function gen.plan(cfg, sync)
     if current == "unknown" then
       -- iniswap does its own detection and strips any init= before writing,
       -- so swapping away from an unrecognized param is safe.
-      io.stderr:write("[warn] init: unrecognized init= in " .. limine .. ", swapping anyway\n")
+      io.stderr:write("warning: init: unrecognized init= in " .. limine .. ", swapping anyway\n")
     end
     swap_planned = true
     table.insert(changes, sync.change("~", "init", desired,
@@ -95,7 +95,7 @@ function gen.plan(cfg, sync)
       function(_, s)
         local ok = s.shell("iniswap --pass " .. desired)
         if not ok then
-          io.stderr:write("[error] init: iniswap " .. desired .. " failed\n")
+          io.stderr:write("error: init: iniswap " .. desired .. " failed\n")
         end
         return ok
       end))
@@ -103,17 +103,17 @@ function gen.plan(cfg, sync)
 
   -- Repair stale /var/db/init: the wrappers read current (then previous)
   -- to pick a shutdown tool, so it must match what limine.conf will boot.
-  -- iniswap only records on an actual swap — a silent cmdline overwrite
+  -- iniswap only records on an actual swap: a silent cmdline overwrite
   -- left the db claiming an init that no longer runs. Skip when a swap is
   -- planned: iniswap records the db itself, and a plan-time repair would
   -- apply after it and clobber the fresh value.
   local db = read_init_db(sync)
   if not swap_planned and current ~= "unknown" and db ~= current then
     table.insert(changes, sync.change("~", "init", "/var/db/init/current",
-      (db or "(unset)") .. "  →  " .. current .. " (align with limine.conf)",
+      (db or "(unset)") .. "  ->  " .. current .. " (align with limine.conf)",
       function(_, s)
         -- roll current into previous only if current holds a different,
-        -- real value — mirrors iniswap's record_init_state ordering
+        -- real value: mirrors iniswap's record_init_state ordering
         if db and db ~= current then
           s.write_file("/var/db/init/previous", db .. "\n")
         end

@@ -1,12 +1,19 @@
 -- Install prefix, overridable so a working tree can be tested without a
 -- repack (NACELLE_LIB=/home/gretagen/nacelle ./nacelle spin system).
+local date = os.date("%Y-%m-%d")
+-- don't want to explain to you what this does
+-- but it just fetches the date from your os
+-- so the generation can tell you when the sync was created and stuff
+-- house has the same system
+
+
 local LIB = os.getenv("NACELLE_LIB")
 if not LIB or LIB == "" then LIB = "/usr/lib/nacelle" end
 
 package.path = LIB .. "/?.lua;" .. LIB .. "/generators/?.lua;" .. package.path
 
 -- Which generators run is decided by /etc/nacelle/enabled_system_generators.lua
--- (the system category's enable list; see plugins.lua, which owns it — the
+-- (the system category's enable list; see plugins.lua, which owns it: the
 -- house category has its own file). sync.lua does not own a list of its own.
 local enabled_generators = require("plugins").enabled_generators("system")
 
@@ -28,7 +35,7 @@ sync.repower = os.getenv("NACELLE_REPOWER") ~= nil
 -- signal. The child's signal-death is therefore the only evidence of an
 -- interrupt, and it is what lets the apply loop tell "user cancelled" from
 -- "command failed". A Ctrl+C landing between commands still reaches us with
--- the default disposition and kills the process outright — that is correct
+-- the default disposition and kills the process outright; that is correct
 -- and needs no flag.
 sync.interrupted = false
 
@@ -46,13 +53,12 @@ local VERBOSE = os.getenv("NACELLE_VERBOSE") ~= nil
 
 function sync.vprint(...)
   if not VERBOSE then return end
-  io.stderr:write("[v] ")
   io.stderr:write(string.format(...))
   io.stderr:write("\n")
 end
 
 function sync.eprint(fmt, ...)
-  io.stderr:write("[error] ")
+  io.stderr:write("error: ")
   io.stderr:write(string.format(fmt, ...))
   io.stderr:write("\n")
 end
@@ -62,19 +68,19 @@ function sync.read_file(path)
   sync.vprint("read_file %s", path)
   local f, err = io.open(path, "r")
   if not f then
-    sync.vprint("  → not found")
+    sync.vprint("  not found")
     return nil
   end
   local c = f:read("*a")
   f:close()
-  sync.vprint("  → %d bytes", #c)
+  sync.vprint("  %d bytes", #c)
   return c
 end
 
 function sync.ensure_dir(dir)
   local f = io.open(dir, "r")
   if f then f:close(); return true end
-  io.stderr:write("[warn] creating directory: " .. dir .. "\n")
+  io.stderr:write("creating directory: " .. dir .. "\n")
   return sync.shell("mkdir -p '" .. dir .. "'")
 end
 
@@ -103,11 +109,11 @@ function sync.shell(cmd)
   local ok, how, code = os.execute(cmd)
   if (how == "signal" and (code == 2 or code == 3)) or
      (how == "exit" and (code == 130 or code == 131)) then
-    sync.vprint("  → interrupted (how=%s code=%s)", tostring(how), tostring(code))
+    sync.vprint("  interrupted (how=%s code=%s)", tostring(how), tostring(code))
     sync.interrupted = true
     return false
   end
-  sync.vprint("  → %s", tostring(ok))
+  sync.vprint("  %s", tostring(ok))
   return ok or false
 end
 
@@ -115,13 +121,13 @@ function sync.shell_output(cmd)
   sync.vprint("shell_output: %s", cmd)
   local f = io.popen(cmd .. " 2>/dev/null", "r")
   if not f then
-    sync.vprint("  → (popen failed)")
+    sync.vprint("  (popen failed)")
     return ""
   end
   local out = f:read("*a")
   f:close()
   local result = (out or ""):gsub("%s+$", "")
-  sync.vprint("  → [%s]", result)
+  sync.vprint("  [%s]", result)
   return result
 end
 
@@ -162,7 +168,7 @@ function sync.collect(cfg)
     sync.vprint("planner '%s' running...", name)
     local ok, plans = pcall(gen.plan, cfg, sync)
     if ok and plans then
-      sync.vprint("  → %d changes", #plans)
+      sync.vprint("  %d changes", #plans)
       for _, c in ipairs(plans) do
         seq = seq + 1
         c.seq = seq
@@ -193,7 +199,7 @@ end
 -- print summary
 function sync.summary(changes)
   if #changes == 0 then
-    print("System seems to be already synchronized, no changes required.")
+    print("System nacelle seems to be already synchronized, no need to change anything.")
     return
   end
   local groups = {}
@@ -206,7 +212,7 @@ function sync.summary(changes)
   -- worth stating is which mode the run is in (if any).
   local modes = {}
   if sync.repower then
-    modes[#modes + 1] = "  mode: repower (reapplying and rebuilding everything)"
+    modes[#modes + 1] = "  mode: repower "
   end
   if #modes > 0 then
     print()
@@ -233,27 +239,27 @@ end
 -- Returns true, failures, interrupted. An interrupt (Ctrl+C during a
 -- command) stops the loop right there: the current command is already
 -- dead, the remaining changes must not run, and the caller must skip the
--- generation creation — a partial run must not be recorded as a
+-- generation creation: a partial run must not be recorded as a
 -- generation.
 function sync.apply(changes)
   local failures = 0
   local merged_applied = false
   for i, c in ipairs(changes) do
     local sym = c.type == "+" and "[+]" or c.type == "-" and "[-]" or "[~]"
-    io.stderr:write(string.format("[apply] %s %s/%s\n", sym, c.section or "?", c.target))
+    io.stderr:write(string.format("applying %s %s/%s\n", sym, c.section or "?", c.target))
     if c.apply_fn then
       local ok, result = pcall(c.apply_fn, c, sync)
       if not ok then
-        io.stderr:write("[error] " .. tostring(result) .. "\n")
+        io.stderr:write("error: " .. tostring(result) .. "\n")
         failures = failures + 1
       elseif result == false then
         -- an interrupt shows up as a failed command too (sync.shell returns
         -- false): the loop below breaks on the flag, so no further change
         -- is attempted and this failure is just the interrupted one
-        io.stderr:write("[error] command failed\n")
+        io.stderr:write("error: command failed\n")
         failures = failures + 1
       else
-        io.stderr:write("[ok] " .. sym .. " " .. (c.section or "?") .. "/" .. c.target .. "\n")
+        io.stderr:write("ok " .. sym .. " " .. (c.section or "?") .. "/" .. c.target .. "\n")
         if (c.section or ""):match("^merged%-packages") then
           merged_applied = true
         end
@@ -261,7 +267,7 @@ function sync.apply(changes)
     end
     if sync.interrupted then
       io.stderr:write(string.format(
-        "[interrupt] synchronization aborted : %d of %d change(s) applied, %d remaining\n",
+        "synchronization aborted: %d of %d change(s) applied, %d remaining\n",
         i - 1, #changes, #changes - i + 1))
       return true, failures, true
     end
@@ -274,7 +280,7 @@ function sync.apply(changes)
       if type(gen.post_merge) == "function" then
         local ok, err = pcall(gen.post_merge, sync)
         if not ok then
-          io.stderr:write("[error] post_merge: " .. tostring(err) .. "\n")
+          io.stderr:write("error: post_merge: " .. tostring(err) .. "\n")
         end
         -- a hook that ends on Ctrl+C stops the remaining hooks: the caches
         -- are refreshed by the next run
@@ -283,7 +289,7 @@ function sync.apply(changes)
     end
   end
   if failures > 0 then
-    io.stderr:write(string.format("\n[warn] %d change(s) failed : review errors above\n", failures))
+    io.stderr:write(string.format("The nacelle hit %d error(s) while applying changes, review them above.\n", failures))
   end
   return true, failures, false
 end
@@ -292,7 +298,7 @@ end
 if arg and arg[0] and arg[0]:match("sync%.lua$") then
   local uid = tonumber((sync.shell_output("id -u")))
   if uid ~= 0 then
-    io.stderr:write("error: root privileges required\n")
+    io.stderr:write("The nacelle can't sync without superuser privileges.\n")
     os.exit(1)
   end
 
@@ -313,7 +319,7 @@ if arg and arg[0] and arg[0]:match("sync%.lua$") then
 
   if #changes == 0 then os.exit(0) end
 
-  io.write("Synchronize system? [y/N]: ")
+  io.write("Synchronize the system nacelle? [y/N]: ")
   io.flush()
   local answer = io.read()
   local ok = answer and (answer:lower() == "y" or answer:lower() == "yes")
@@ -322,18 +328,18 @@ if arg and arg[0] and arg[0]:match("sync%.lua$") then
     os.exit(0)
   end
 
-  print("Applying changes...")
+  print("Synchronizing.")
   local _, failures, interrupted = sync.apply(changes)
   if interrupted then
-    -- Ctrl+C during a command : counts are on the [interrupt] line above.
+    -- Ctrl+C during a command: the counts are on the aborted line above.
     -- Exit 130 (128 + SIGINT) so the shell sees a conventional
-    -- interrupt status, and create no generation : the run is partial.
-    print("Interrupted : synchronization aborted.")
-    io.stderr:write("No new generation has been created : re-run nacelle to apply the remaining changes.\n")
+    -- interrupt status, and create no generation: the run is partial.
+    print("Interrupted: synchronization aborted.")
+    io.stderr:write("Run the nacelle again to apply the remaining changes.\n")
     os.exit(130)
   elseif failures and failures > 0 then
     print("Synchronization finished with " .. failures .. " failure(s).")
-    io.stderr:write("No new generation has been created : fix errors first.\n")
+    io.stderr:write("No new generation has been created: fix the errors above first.\n")
   else
     -- NACELLE_NO_GENERATION comes from the CLI's --no-generation: apply
     -- everything, but leave the boot entries alone.
@@ -341,13 +347,13 @@ if arg and arg[0] and arg[0]:match("sync%.lua$") then
       print("Skipping generation creation (--no-generation).")
     else
       print("Creating post-sync generation...")
-      local label = sync.repower and "post-repower" or "post-sync"
+      local label = sync.repower and "post-repowering of system nacelle on " .. date or "post-synchronization of system nacelle on " .. date
       if not sync.shell("chronos create '" .. label .. "'") then
-        io.stderr:write("[warn] chronos create failed : system is synced but no new boot entry was added.\n")
-        io.stderr:write("        Check btrfs layout (@ / @snapshots) and run: chronos create '" .. label .. "'\n")
+        io.stderr:write("The nacelle synchronized the system, but couldn't create a generation.\n")
+        io.stderr:write("You can create one by hand if you want?\n")
       end
     end
-    print("Synchronization completed.")
+    print("Nacelle system sync complete.")
   end
 end
 

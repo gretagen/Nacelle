@@ -1,10 +1,10 @@
--- plugins.lua — resolve which generators haliade-synchronize enables.
+-- plugins.lua: resolve which generators nacelle enables.
 --
 -- Which generators run is decided by an enable list per category:
 --
---   system → /etc/nacelle/enabled_system_generators.lua
+--   system -> /etc/nacelle/enabled_system_generators.lua
 --            variable: local enabled_system_generators = { ... }
---   house  → /etc/nacelle/houses/enabled_house_generators.lua
+--   house  -> /etc/nacelle/houses/enabled_house_generators.lua
 --            variable: local enabled_house_generators = { ... }
 --
 -- Each category owns its own file *and* its own variable name, so the two
@@ -12,18 +12,18 @@
 -- spellings are still read (legacy_files below, and the generic
 -- `enabled_generators` variable), because a file that exists under an old
 -- name and is silently ignored would make the sync fall back to the built-in
--- defaults — which means uninstalling packages nobody asked to remove.
+-- defaults, which means uninstalling packages nobody asked to remove.
 --
 -- Both files are user-edited, never owned by a package, so a declaration
 -- update can never clobber them. sync.lua and house_sync.lua own no list of
 -- their own anymore: they just ask this module "who's enabled?" and iterate
 -- whatever comes back.
 --
---   file missing → the category's built-in default list (fresh installs,
+--   file missing: the category's built-in default list (fresh installs,
 --                  package tests)
---   file present → replaces the default entirely: add a generator name to
+--   file present: replaces the default entirely: add a generator name to
 --                  enable it, remove one to disable it
---   file broken  → hard error naming the file (never sync with a half-read
+--   file broken: hard error naming the file (never sync with a half-read
 --                  list)
 --
 -- Every generator is in the same position: the defaults are only the list a
@@ -35,7 +35,7 @@
 -- its own alias table for register/load; this one does not borrow it).
 --
 -- Order in the return list is respected by the loader (collection is stable),
--- so a file can also order generators where that matters — on the system
+-- so a file can also order generators where that matters, on the system
 -- side subspaces must run before subspaces_packages/merged_packages.
 
 local plugins = {}
@@ -93,10 +93,10 @@ local function canonical_category(cat)
 end
 
 -- What callers hand to enabled_generators/enabled_source:
---   nil              → the system category (compat with the pre-category
+--   nil: the system category (compat with the pre-category
 --                      signature, used by sync.lua and package tests)
---   "system"/"house" → that category and its enable file
---   a path           → an explicit file ("/..." or "*.lua"), for tests that
+--   "system"/"house": that category and its enable file
+--   a path: an explicit file ("/..." or "*.lua"), for tests that
 --                      point at their own enable list
 -- Anything else is an error naming the two valid categories.
 local function resolve_ref(ref)
@@ -123,7 +123,7 @@ end
 -- returns are tried before running the file as-is, so a `local <list_var>`
 -- file is read back from its own scope. A file that already ends in a
 -- top-level return makes every appended form a syntax error ("return" must
--- be the last statement), so it falls back to running the file as-is — and
+-- be the last statement), so it falls back to running the file as-is; and
 -- each file therefore runs at most once per form that compiles, never twice
 -- in the same attempt.
 local function load_enabled_file(path, list_var)
@@ -181,7 +181,7 @@ function plugins.defaults(category)
 end
 
 -- A name listed twice would run its planner twice (every change planned
--- twice), so the first occurrence wins — and the file it came from says so.
+-- twice), so the first occurrence wins, and the file it came from says so.
 local function dedupe(list, path)
   local seen, out, dups = {}, {}, {}
   for _, name in ipairs(list) do
@@ -193,9 +193,9 @@ local function dedupe(list, path)
     end
   end
   if #dups > 0 then
-    io.stderr:write("[warn] " .. path .. " lists " .. #dups
+    io.stderr:write("warning: " .. path .. " lists " .. #dups
       .. " duplicate generator(s) ('" .. table.concat(dups, "', '")
-      .. "') : only the first occurrence runs\n")
+      .. "'): only the first occurrence runs\n")
   end
   return out
 end
@@ -219,13 +219,13 @@ function plugins.enabled_source(ref)
   if list then return dedupe(list, cfg.enabled_file), cfg.enabled_file end
 
   -- Current name absent: an older spelling of the same file still counts,
-  -- and it is announced — a file silently ignored here would make the sync
+  -- and it is announced: a file silently ignored here would make the sync
   -- fall back to the built-in defaults and start removing packages.
   for _, legacy in ipairs(cfg.legacy_files) do
     local l = load_enabled_file(legacy, cfg.list_var)
     if l then
-      io.stderr:write("[note] reading legacy enable file " .. legacy
-        .. " : rename it to " .. cfg.enabled_file .. "\n")
+      io.stderr:write("note: reading legacy enable file " .. legacy
+        .. "; rename it to " .. cfg.enabled_file .. "\n")
       return dedupe(l, legacy), legacy
     end
   end
@@ -272,8 +272,8 @@ if arg and arg[0] and arg[0]:match("plugins%.lua$") then
     for _, c in ipairs(checks) do
       local first, later = c[1], c[2]
       if pos[first] and pos[later] and pos[first] > pos[later] then
-        io.stderr:write("[warn] order: '" .. first .. "' runs after '" .. later
-          .. "' in " .. CATEGORIES[cat].enabled_file .. " : move it up ("
+        io.stderr:write("warning: order: '" .. first .. "' runs after '" .. later
+          .. "' in " .. CATEGORIES[cat].enabled_file .. ": move it up ("
           .. first .. " must run first)\n")
       end
     end
@@ -329,8 +329,8 @@ if arg and arg[0] and arg[0]:match("plugins%.lua$") then
           if os.remove(legacy) then
             print("Migrated " .. legacy .. " to " .. cfg.enabled_file .. ".")
           else
-            io.stderr:write("[warn] could not remove legacy " .. legacy
-              .. " : " .. cfg.enabled_file .. " now wins, remove it by hand\n")
+            io.stderr:write("warning: could not remove legacy " .. legacy
+              .. ": " .. cfg.enabled_file .. " now wins, remove it by hand\n")
           end
         end
       end
@@ -360,7 +360,7 @@ if arg and arg[0] and arg[0]:match("plugins%.lua$") then
         end
       end
       if not resolves(cat, name) then
-        io.stderr:write("[warn] nothing provides '" .. name .. "' yet : it will "
+        io.stderr:write("warning: nothing provides '" .. name .. "' yet; it will "
           .. "show as MISSING until the package shipping it is installed\n")
       end
       list[#list + 1] = name
@@ -389,9 +389,9 @@ if arg and arg[0] and arg[0]:match("plugins%.lua$") then
     local cfg = CATEGORIES[cat]
     local list, src = plugins.enabled_source(cat)
     if src then
-      print("enabled generators (" .. cat .. ") : " .. src .. " (" .. #list .. ")")
+      print("enabled generators (" .. cat .. "): " .. src .. " (" .. #list .. ")")
     else
-      print("enabled generators (" .. cat .. ") : built-in default list (" .. #list .. ")")
+      print("enabled generators (" .. cat .. "): built-in default list (" .. #list .. ")")
     end
     print()
 

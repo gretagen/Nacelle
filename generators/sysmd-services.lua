@@ -2,7 +2,7 @@ local gen = {}
 gen.name = "sysmd-services"
 
 -- Systemd services: ensure each entry in ["sysmd-services"] is enabled via a
--- symlink in /etc/systemd/system/multi-user.target.wants. Add-only — services
+-- symlink in /etc/systemd/system/multi-user.target.wants. Add-only: services
 -- dropped from the list are left enabled (not disabled).
 --
 -- Unit files ship with the systemd package (zeta); this generator only
@@ -13,7 +13,7 @@ gen.name = "sysmd-services"
 --   iwd          -> iwd.service
 --   logind       -> systemd-logind.service   (NOT elogind: under systemd the
 --                  login1 bus name is served by systemd-logind, and elogind
---                  is bridged off — see /usr/libexec/haliade/logind-bridge)
+--                  is bridged off: see /usr/libexec/haliade/logind-bridge)
 --   rfkill       -> systemd-rfkill.service
 --   agetty.ttyN  -> getty@ttyN.service
 --   agetty.ttyS0 -> serial-getty@ttyS0.service
@@ -71,14 +71,14 @@ function gen.plan(cfg, sync)
       -- already enabled
     elseif sync.read_file(units_dir .. "/" .. unit_file) then
       table.insert(changes, sync.change(already and "~" or "+", "sysmd-services", svc,
-        already and ("reapply : enable " .. unit) or ("enable " .. unit),
+        already and ("reapply: enable " .. unit) or ("enable " .. unit),
         function()
           sync.shell("mkdir -p " .. wants_dir)
           return sync.shell("ln -sfn " .. units_dir .. "/" .. unit_file ..
             " " .. wants_dir .. "/" .. unit)
         end))
     else
-      io.stderr:write("[warn] sysmd-services: no systemd unit for '" .. svc
+      io.stderr:write("warning: sysmd-services: no systemd unit for '" .. svc
         .. "' (" .. unit_file .. "), skipping\n")
     end
   end

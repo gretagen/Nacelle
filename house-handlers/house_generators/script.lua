@@ -10,10 +10,10 @@ function gen.plan(cfg, house_sync)
     local current = house_sync.read_file(path)
     if house_sync.differs(current, content) then
       local c = house_sync.change("~", "script", path, nil,
-        function() 
-        local ok, err = house_sync.write_file(path, content)
-        if not ok then return false, err end
-        return house_sync.shell("chmod +x " .. path) 
+        function()
+          local ok, err = house_sync.write_file(path, content)
+          if not ok then return false, err end
+          return house_sync.shell("chmod +x " .. path)
         end)
       -- chmod +x needs ownership even when the file itself is writable
       if not house_sync.writable_path(path)
